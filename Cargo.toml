@@ -6,3 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+talk = {git = "https://github.com/Distributed-EPFL/talk"}
+varcram = {git = "https://github.com/Distributed-EPFL/varcram"}
+zebra = {git = "https://github.com/Distributed-EPFL/zebra"}
