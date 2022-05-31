@@ -4,6 +4,8 @@ use std::{collections::HashMap, fs, iter};
 
 use talk::crypto::{Identity, KeyChain};
 
+use crate::{directory::Directory, membership::Membership};
+
 #[derive(Serialize, Deserialize)]
 pub struct Passepartout {
     keychains: HashMap<Identity, KeyChain>,
@@ -25,6 +27,22 @@ impl Passepartout {
 
     pub fn keychain(&self, identity: Identity) -> KeyChain {
         self.keychains.get(&identity).unwrap().clone()
+    }
+
+    pub fn system(&self, servers: usize) -> (Membership, Directory) {
+        let mut keycards = self.keychains.values().map(KeyChain::keycard);
+
+        let servers = iter::repeat_with(|| keycards.next().unwrap()).take(servers);
+        let membership = Membership::from_servers(servers);
+
+        let clients = keycards
+            .enumerate()
+            .map(|(id, keycard)| (id as u64, keycard))
+            .collect::<HashMap<_, _>>();
+
+        let directory = Directory::from_keycards(clients);
+
+        (membership, directory)
     }
 
     pub fn save(&self, path: &str) {
