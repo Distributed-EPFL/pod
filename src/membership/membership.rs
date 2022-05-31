@@ -28,6 +28,6 @@ impl Membership {
     }
 
     pub fn quorum(&self) -> usize {
-        self.servers.len() - (self.servers.len() - 1) / 3
+        self.servers.len() - self.plurality() + 1
     }
 }
