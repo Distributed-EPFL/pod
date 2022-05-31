@@ -80,7 +80,7 @@ mod tests {
             .map(|(identity, keychain)| (*identity, keychain.sign(&message).unwrap()))
             .collect::<HashMap<_, _>>();
 
-        let loaded = Passepartout::load("assets/passepartout.bin");
+        let loaded = Passepartout::load("assets/test/passepartout.bin");
 
         for (identity, signature) in signatures {
             signature
