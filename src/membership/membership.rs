@@ -10,7 +10,7 @@ pub struct Membership {
 }
 
 impl Membership {
-    pub fn from_servers<K>(servers: K) -> Self
+    pub(crate) fn from_servers<K>(servers: K) -> Self
     where
         K: IntoIterator<Item = KeyCard>,
     {
@@ -24,6 +24,18 @@ impl Membership {
 
     pub fn load(path: &str) -> Membership {
         let servers = bincode::deserialize::<Vec<_>>(fs::read(path).unwrap().as_slice()).unwrap();
+        Membership::from_servers(servers)
+    }
+
+    pub fn load_exact(path: &str, size: usize) -> Membership {
+        let mut servers =
+            bincode::deserialize::<Vec<_>>(fs::read(path).unwrap().as_slice()).unwrap();
+
+        if servers.len() < size {
+            panic!("`load_exact` could not load enough servers");
+        }
+
+        servers.truncate(size);
         Membership::from_servers(servers)
     }
 
