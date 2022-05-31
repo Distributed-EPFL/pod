@@ -10,7 +10,7 @@ pub struct Membership {
 }
 
 impl Membership {
-    pub(crate) fn from_servers<K>(servers: K) -> Self
+    pub fn from_servers<K>(servers: K) -> Self
     where
         K: IntoIterator<Item = KeyCard>,
     {
