@@ -22,4 +22,12 @@ impl Membership {
     pub fn servers(&self) -> &BTreeMap<Identity, KeyCard> {
         &self.servers
     }
+
+    pub fn plurality(&self) -> usize {
+        (self.servers.len() - 1) / 3 + 1
+    }
+
+    pub fn quorum(&self) -> usize {
+        self.servers.len() - (self.servers.len() - 1) / 3
+    }
 }
