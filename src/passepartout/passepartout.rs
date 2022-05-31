@@ -10,7 +10,7 @@ pub struct Passepartout {
 }
 
 impl Passepartout {
-    pub fn random(size: usize) -> Passepartout {
+    pub fn random(size: usize) -> Self {
         let keychains = iter::repeat_with(KeyChain::random)
             .take(size)
             .map(|keychain| (keychain.keycard().identity(), keychain))
@@ -19,7 +19,7 @@ impl Passepartout {
         Passepartout { keychains }
     }
 
-    pub fn load(path: &str) -> Passepartout {
+    pub fn load(path: &str) -> Self {
         bincode::deserialize(fs::read(path).unwrap().as_slice()).unwrap()
     }
 
