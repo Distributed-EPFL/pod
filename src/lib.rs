@@ -3,5 +3,5 @@ mod membership;
 mod passepartout;
 
 pub use directory::Directory;
-pub use membership::Membership;
+pub use membership::{Certificate, CertificateError, Membership};
 pub use passepartout::Passepartout;

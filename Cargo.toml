@@ -9,6 +9,7 @@ edition = "2021"
 talk = {git = "https://github.com/Distributed-EPFL/talk"}
 varcram = {git = "https://github.com/Distributed-EPFL/varcram"}
 zebra = {git = "https://github.com/Distributed-EPFL/zebra"}
+doomstack = { git = "https://github.com/Distributed-EPFL/doomstack" }
 
 serde = { version = "~1.0", features = [ "derive", "rc" ] }
 bincode = { version = "~1.3" }
