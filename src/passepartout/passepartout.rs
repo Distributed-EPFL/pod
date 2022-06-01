@@ -1,3 +1,5 @@
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
 use serde::{Deserialize, Serialize};
 
 use std::{collections::HashMap, fs, iter};
@@ -11,18 +13,43 @@ pub struct Passepartout {
     keychains: HashMap<Identity, KeyChain>,
 }
 
+const CHUNKS: usize = 64;
+
 impl Passepartout {
     pub fn random(size: usize) -> Self {
-        let keychains = iter::repeat_with(KeyChain::random)
-            .take(size)
-            .map(|keychain| (keychain.keycard().identity(), keychain))
-            .collect::<HashMap<_, _>>();
+        let keychains  = (0..CHUNKS)
+            .into_par_iter()
+            .map(|_| {
+                iter::repeat_with(KeyChain::random)
+                    .take(size / CHUNKS)
+                    .map(|keychain| (keychain.keycard().identity(), keychain))
+                    .collect::<Vec<_>>()
+
+            })
+            .flatten()
+            .chain(
+                iter::repeat_with(KeyChain::random)
+                    .take(size % CHUNKS)
+                    .map(|keychain| (keychain.keycard().identity(), keychain))
+                    .collect::<Vec<_>>()
+            )
+            .collect::<HashMap<Identity, KeyChain>>();
 
         Passepartout { keychains }
     }
 
     pub fn load(path: &str) -> Self {
-        bincode::deserialize(fs::read(path).unwrap().as_slice()).unwrap()
+        let bytes = fs::read(path).unwrap();
+
+        let chunks = bincode::deserialize::<Vec<Vec<u8>>>(bytes.as_slice()).unwrap();
+
+        let keychains = chunks
+            .par_iter()
+            .map(|chunk| bincode::deserialize::<Vec<(Identity, KeyChain)>>(chunk).unwrap())
+            .flatten()
+            .collect::<HashMap<_, _>>();
+
+        Passepartout { keychains }
     }
 
     pub fn keychain(&self, identity: Identity) -> KeyChain {
@@ -46,7 +73,20 @@ impl Passepartout {
     }
 
     pub fn save(&self, path: &str) {
-        fs::write(path, bincode::serialize(&self).unwrap().as_slice()).unwrap();
+        let keychains = self
+            .keychains
+            .iter()
+            .map(|(id, keychain)| (*id, keychain.clone()))
+            .collect::<Vec<_>>();
+
+        let chunk_size = (keychains.len() + CHUNKS - 1) / CHUNKS;
+
+        let chunks = keychains
+            .chunks(chunk_size)
+            .map(|chunk| bincode::serialize(&chunk).unwrap())
+            .collect::<Vec<_>>();
+
+        fs::write(path, bincode::serialize(&chunks).unwrap().as_slice()).unwrap();
     }
 }
 
@@ -80,7 +120,7 @@ mod tests {
             .map(|(identity, keychain)| (*identity, keychain.sign(&message).unwrap()))
             .collect::<HashMap<_, _>>();
 
-        let loaded = Passepartout::load("assets/test/passepartout.bin");
+        let loaded = Passepartout::load("assets/passepartout.bin");
 
         for (identity, signature) in signatures {
             signature
