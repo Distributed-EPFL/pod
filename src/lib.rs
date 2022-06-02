@@ -1,10 +1,10 @@
 mod batch;
+mod crypto;
 mod directory;
 mod membership;
-mod crypto;
 mod passepartout;
 
-pub use batch::{Message, Payload};
+pub use batch::{Batch, Message, Payload};
 pub use directory::Directory;
 pub use membership::{Certificate, CertificateError, Membership};
 pub use passepartout::Passepartout;
