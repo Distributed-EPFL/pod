@@ -1,6 +1,7 @@
 mod batch;
 mod directory;
 mod membership;
+mod crypto;
 mod passepartout;
 
 pub use batch::{Message, Payload};
