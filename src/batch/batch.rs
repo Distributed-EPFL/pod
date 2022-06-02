@@ -31,7 +31,7 @@ pub enum BatchError {
 
 impl Batch {
     pub fn random(directory: &Directory, passepartout: &Passepartout, size: usize) -> Self {
-        let range = 0..(directory.len() as u64);
+        let range = 0..(directory.capacity() as u64);
         let ids = range.into_iter().choose_multiple(&mut thread_rng(), size);
 
         let mut payloads = ids
