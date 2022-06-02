@@ -40,6 +40,10 @@ impl Directory {
         self.keycards.get(&id).cloned()
     }
 
+    pub fn len(&self) -> usize {
+        self.keycards.len()
+    }
+
     pub fn save(&self, path: &str) {
         let keycards = self
             .keycards
