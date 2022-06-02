@@ -1,3 +1,5 @@
+use crate::{directory::Directory, membership::Membership};
+
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use serde::{Deserialize, Serialize};
@@ -5,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, iter};
 
 use talk::crypto::{Identity, KeyChain};
-
-use crate::{directory::Directory, membership::Membership};
 
 #[derive(Serialize, Deserialize)]
 pub struct Passepartout {
@@ -17,23 +17,14 @@ const CHUNKS: usize = 64;
 
 impl Passepartout {
     pub fn random(size: usize) -> Self {
-        let keychains  = (0..CHUNKS)
+        let keychains = (0..size)
             .into_par_iter()
             .map(|_| {
-                iter::repeat_with(KeyChain::random)
-                    .take(size / CHUNKS)
-                    .map(|keychain| (keychain.keycard().identity(), keychain))
-                    .collect::<Vec<_>>()
-
+                let keychain = KeyChain::random();
+                let identity = keychain.keycard().identity();
+                (identity, keychain)
             })
-            .flatten()
-            .chain(
-                iter::repeat_with(KeyChain::random)
-                    .take(size % CHUNKS)
-                    .map(|keychain| (keychain.keycard().identity(), keychain))
-                    .collect::<Vec<_>>()
-            )
-            .collect::<HashMap<Identity, KeyChain>>();
+            .collect::<HashMap<_, _>>();
 
         Passepartout { keychains }
     }
