@@ -125,7 +125,7 @@ impl Batch {
             if let Some(reduction) = self.reduction {
                 reduction
                     .verify(
-                        reducers.iter(),
+                        reducers.into_iter(),
                         &ReductionStatement::new(self.payloads.root()),
                     )
                     .pot(BatchError::BatchInvalid, here!())?;

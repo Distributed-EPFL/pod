@@ -36,8 +36,8 @@ impl Directory {
         Directory { keycards }
     }
 
-    pub fn keycard(&self, id: u64) -> Option<KeyCard> {
-        self.keycards.get(id as usize).cloned().flatten()
+    pub fn keycard(&self, id: u64) -> Option<&KeyCard> {
+        self.keycards.get(id as usize).map(Option::as_ref).flatten()
     }
 
     pub fn capacity(&self) -> usize {
