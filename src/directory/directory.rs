@@ -2,20 +2,24 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use serde::{Deserialize, Serialize};
 
-use std::{collections::HashMap, fs};
+use std::fs;
 
 use talk::crypto::KeyCard;
 
 #[derive(Serialize, Deserialize)]
 pub struct Directory {
-    keycards: HashMap<u64, KeyCard>,
+    keycards: Vec<Option<KeyCard>>,
 }
 
 const CHUNKS: usize = 64;
 
 impl Directory {
     pub fn new() -> Directory {
-        Directory::from_keycards(HashMap::new())
+        Directory::from_keycards(Vec::new())
+    }
+
+    pub(crate) fn from_keycards(keycards: Vec<Option<KeyCard>>) -> Directory {
+        Directory { keycards }
     }
 
     pub fn load(path: &str) -> Directory {
@@ -25,35 +29,26 @@ impl Directory {
 
         let keycards = chunks
             .par_iter()
-            .map(|chunk| bincode::deserialize::<Vec<(u64, KeyCard)>>(chunk).unwrap())
+            .map(|chunk| bincode::deserialize::<Vec<Option<KeyCard>>>(chunk).unwrap())
             .flatten()
-            .collect::<HashMap<_, _>>();
+            .collect::<Vec<_>>();
 
-        Directory { keycards }
-    }
-
-    pub(crate) fn from_keycards(keycards: HashMap<u64, KeyCard>) -> Directory {
         Directory { keycards }
     }
 
     pub fn keycard(&self, id: u64) -> Option<KeyCard> {
-        self.keycards.get(&id).cloned()
+        self.keycards.get(id as usize).cloned().flatten()
     }
 
-    pub fn len(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.keycards.len()
     }
 
     pub fn save(&self, path: &str) {
-        let keycards = self
+        let chunk_size = (self.keycards.len() + CHUNKS - 1) / CHUNKS;
+
+        let chunks = self
             .keycards
-            .iter()
-            .map(|(id, keycard)| (*id, keycard.clone()))
-            .collect::<Vec<_>>();
-
-        let chunk_size = (keycards.len() + CHUNKS - 1) / CHUNKS;
-
-        let chunks = keycards
             .chunks(chunk_size)
             .map(|chunk| bincode::serialize(&chunk).unwrap())
             .collect::<Vec<_>>();
