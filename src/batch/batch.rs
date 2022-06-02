@@ -1,12 +1,14 @@
 use crate::{
-    batch::{Payload, ReductionStatement},
+    batch::{BroadcastStatement, Payload, ReductionStatement},
     directory::Directory,
     passepartout::Passepartout,
 };
 
+use doomstack::{here, Doom, ResultExt, Top};
+
 use rand::prelude::*;
 
-use std::{collections::HashMap, convert::TryInto, iter};
+use std::{collections::BTreeMap, convert::TryInto, iter};
 
 use talk::crypto::primitives::{multi::Signature as MultiSignature, sign::Signature};
 
@@ -18,7 +20,13 @@ const NULL_ID: u64 = u64::MAX;
 pub struct Batch {
     payloads: Vector<[Payload; NIBBLE]>,
     reduction: Option<MultiSignature>,
-    stragglers: HashMap<u64, Signature>,
+    stragglers: BTreeMap<u64, Signature>,
+}
+
+#[derive(Doom)]
+pub enum BatchError {
+    #[doom(description("Batch invalid"))]
+    BatchInvalid,
 }
 
 impl Batch {
@@ -64,12 +72,91 @@ impl Batch {
         });
 
         let reduction = Some(MultiSignature::aggregate(reductions).unwrap());
-        let stragglers = HashMap::new();
+        let stragglers = BTreeMap::new();
 
         Batch {
             payloads,
             reduction,
             stragglers,
         }
+    }
+
+    pub fn payloads(&self) -> impl Iterator<Item = &Payload> {
+        self.payloads
+            .items()
+            .iter()
+            .flatten()
+            .filter(|item| item.id != NULL_ID)
+    }
+
+    pub fn verify(&self, directory: &Directory) -> Result<(), Top<BatchError>> {
+        let mut payloads = self.payloads();
+        let mut last = payloads.next().unwrap().id; // TODO: Think of what you've done
+
+        for next in payloads {
+            if next.id <= last {
+                return BatchError::BatchInvalid.fail();
+            }
+
+            last = next.id;
+        }
+
+        let mut stragglers = self.stragglers.iter().peekable();
+        let mut reducers = Vec::new();
+
+        for payload in self.payloads() {
+            if let Some((id, signature)) = stragglers.peek().cloned() {
+                if payload.id == *id {
+                    signature
+                        .verify(
+                            &directory.keycard(*id).unwrap(),
+                            &BroadcastStatement::new(payload.message),
+                        )
+                        .pot(BatchError::BatchInvalid, here!())?;
+
+                    stragglers.next();
+                }
+            } else {
+                reducers.push(directory.keycard(payload.id).unwrap());
+            }
+        }
+
+        if reducers.len() > 0 {
+            if let Some(reduction) = self.reduction {
+                reduction
+                    .verify(
+                        reducers.iter(),
+                        &ReductionStatement::new(self.payloads.root()),
+                    )
+                    .pot(BatchError::BatchInvalid, here!())?;
+            } else {
+                return BatchError::BatchInvalid.fail();
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn correct_size() {
+        let passepartout = Passepartout::random(100);
+        let (_membership, directory) = passepartout.system(1);
+
+        let batch = Batch::random(&directory, &passepartout, 42);
+        assert_eq!(batch.payloads.len(), (42 + NIBBLE - 1) / NIBBLE);
+    }
+
+    #[test]
+    fn verify() {
+        let passepartout = Passepartout::random(100);
+        let (_membership, directory) = passepartout.system(1);
+
+        let batch = Batch::random(&directory, &passepartout, 42);
+        batch.verify(&directory).unwrap();
     }
 }
