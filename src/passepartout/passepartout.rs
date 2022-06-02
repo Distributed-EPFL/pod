@@ -53,11 +53,7 @@ impl Passepartout {
         let servers = iter::repeat_with(|| keycards.next().unwrap()).take(servers);
         let membership = Membership::from_servers(servers);
 
-        let clients = keycards
-            .enumerate()
-            .map(|(id, keycard)| (id as u64, keycard))
-            .collect::<HashMap<_, _>>();
-
+        let clients = keycards.map(|keycard| Some(keycard)).collect::<Vec<_>>();
         let directory = Directory::from_keycards(clients);
 
         (membership, directory)
