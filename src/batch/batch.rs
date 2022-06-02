@@ -102,7 +102,7 @@ impl Batch {
         }
 
         let mut stragglers = self.stragglers.iter().peekable();
-        let mut reducers = Vec::new();
+        let mut reducers = Vec::with_capacity(self.payloads.len());
 
         for payload in self.payloads() {
             if let Some((id, signature)) = stragglers.peek().cloned() {
