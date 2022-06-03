@@ -1,5 +1,7 @@
 use crate::batch::{batch::NIBBLE, Batch, Message, Payload};
 
+use serde::{Deserialize, Serialize};
+
 use std::collections::BTreeMap;
 
 use talk::crypto::primitives::{multi::Signature as MultiSignature, sign::Signature};
@@ -8,6 +10,7 @@ use varcram::VarCram;
 
 use zebra::vector::Vector;
 
+#[derive(Serialize, Deserialize)]
 pub struct CompressedBatch {
     ids: VarCram,
     messages: Vec<Message>,
