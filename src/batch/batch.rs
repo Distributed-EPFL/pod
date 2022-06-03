@@ -1,5 +1,5 @@
 use crate::{
-    batch::{BroadcastStatement, Payload, ReductionStatement},
+    batch::{BroadcastStatement, CompressedBatch, Message, Payload, ReductionStatement},
     directory::Directory,
     passepartout::Passepartout,
 };
@@ -11,6 +11,8 @@ use rand::prelude::*;
 use std::{collections::BTreeMap, convert::TryInto, iter};
 
 use talk::crypto::primitives::{multi::Signature as MultiSignature, sign::Signature};
+
+use varcram::VarCram;
 
 use zebra::vector::Vector;
 
@@ -30,6 +32,45 @@ pub enum BatchError {
 }
 
 impl Batch {
+    pub(in crate::batch) fn from_compressed_batch(
+        ids: VarCram,
+        messages: Vec<Message>,
+        reduction: Option<MultiSignature>,
+        stragglers: BTreeMap<u64, Signature>,
+    ) -> Self {
+        let ids = ids.uncram().unwrap(); // TODO: Handle `None` case (`CompressedBatch` might be malformed)
+
+        let mut payloads = ids
+            .into_iter()
+            .zip(messages.into_iter())
+            .map(|(id, message)| Payload { id, message })
+            .collect::<Vec<_>>();
+
+        payloads.extend(
+            iter::repeat(Payload {
+                id: NULL_ID,
+                message: [u8::MAX; 8],
+            })
+            .take(NIBBLE - 1),
+        );
+
+        let payloads = payloads
+            .chunks_exact(NIBBLE)
+            .map(|chunk| {
+                let chunk: &[Payload; NIBBLE] = chunk.try_into().unwrap();
+                chunk.clone()
+            })
+            .collect::<Vec<_>>();
+
+        let payloads = Vector::new(payloads).unwrap();
+
+        Batch {
+            payloads,
+            reduction,
+            stragglers,
+        }
+    }
+
     pub fn random(directory: &Directory, passepartout: &Passepartout, size: usize) -> Self {
         let range = 0..(directory.capacity() as u64);
         let ids = range.into_iter().choose_multiple(&mut thread_rng(), size);
@@ -87,6 +128,10 @@ impl Batch {
             .iter()
             .flatten()
             .filter(|item| item.id != NULL_ID)
+    }
+
+    pub fn compress(self) -> CompressedBatch {
+        CompressedBatch::from_batch(self.payloads, self.reduction, self.stragglers)
     }
 
     pub fn verify(&self, directory: &Directory) -> Result<(), Top<BatchError>> {
