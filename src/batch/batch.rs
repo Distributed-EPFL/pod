@@ -14,7 +14,7 @@ use talk::crypto::primitives::{multi::Signature as MultiSignature, sign::Signatu
 
 use zebra::vector::Vector;
 
-const NIBBLE: usize = 4; // TODO: Find a more appropriate name
+pub(in crate::batch) const NIBBLE: usize = 4; // TODO: Find a more appropriate name
 const NULL_ID: u64 = u64::MAX;
 
 pub struct Batch {
