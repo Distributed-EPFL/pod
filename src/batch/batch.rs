@@ -32,45 +32,6 @@ pub enum BatchError {
 }
 
 impl Batch {
-    pub(in crate::batch) fn from_compressed_batch(
-        ids: VarCram,
-        messages: Vec<Message>,
-        reduction: Option<MultiSignature>,
-        stragglers: BTreeMap<u64, Signature>,
-    ) -> Self {
-        let ids = ids.uncram().unwrap(); // TODO: Handle `None` case (`CompressedBatch` might be malformed)
-
-        let mut payloads = ids
-            .into_iter()
-            .zip(messages.into_iter())
-            .map(|(id, message)| Payload { id, message })
-            .collect::<Vec<_>>();
-
-        payloads.extend(
-            iter::repeat(Payload {
-                id: NULL_ID,
-                message: [u8::MAX; 8],
-            })
-            .take(NIBBLE - 1),
-        );
-
-        let payloads = payloads
-            .chunks_exact(NIBBLE)
-            .map(|chunk| {
-                let chunk: &[Payload; NIBBLE] = chunk.try_into().unwrap();
-                chunk.clone()
-            })
-            .collect::<Vec<_>>();
-
-        let payloads = Vector::new(payloads).unwrap();
-
-        Batch {
-            payloads,
-            reduction,
-            stragglers,
-        }
-    }
-
     pub fn random(directory: &Directory, passepartout: &Passepartout, size: usize) -> Self {
         let range = 0..(directory.capacity() as u64);
         let ids = range.into_iter().choose_multiple(&mut thread_rng(), size);
@@ -86,23 +47,7 @@ impl Batch {
 
         payloads.sort_unstable_by_key(|payload| payload.id);
 
-        payloads.extend(
-            iter::repeat(Payload {
-                id: NULL_ID,
-                message: [u8::MAX; 8],
-            })
-            .take(NIBBLE - 1),
-        );
-
-        let payloads = payloads
-            .chunks_exact(NIBBLE)
-            .map(|chunk| {
-                let chunk: &[Payload; NIBBLE] = chunk.try_into().unwrap();
-                chunk.clone()
-            })
-            .collect::<Vec<_>>();
-
-        let payloads = Vector::new(payloads).unwrap();
+        let payloads = Batch::vectorize_payloads(payloads);
         let root = payloads.root();
 
         let reductions = ids.into_iter().map(|id| {
@@ -120,6 +65,49 @@ impl Batch {
             reduction,
             stragglers,
         }
+    }
+
+    pub(in crate::batch) fn from_compressed_batch(
+        ids: VarCram,
+        messages: Vec<Message>,
+        reduction: Option<MultiSignature>,
+        stragglers: BTreeMap<u64, Signature>,
+    ) -> Self {
+        let ids = ids.uncram().unwrap(); // TODO: Handle `None` case (`CompressedBatch` might be malformed)
+
+        let payloads = ids
+            .into_iter()
+            .zip(messages.into_iter())
+            .map(|(id, message)| Payload { id, message })
+            .collect::<Vec<_>>();
+
+        let payloads = Batch::vectorize_payloads(payloads);
+
+        Batch {
+            payloads,
+            reduction,
+            stragglers,
+        }
+    }
+
+    fn vectorize_payloads(mut payloads: Vec<Payload>) -> Vector<[Payload; NIBBLE]> {
+        payloads.extend(
+            iter::repeat(Payload {
+                id: NULL_ID,
+                message: [u8::MAX; 8],
+            })
+            .take(NIBBLE - 1),
+        );
+
+        let payloads = payloads
+            .chunks_exact(NIBBLE)
+            .map(|chunk| {
+                let chunk: &[Payload; NIBBLE] = chunk.try_into().unwrap();
+                chunk.clone()
+            })
+            .collect::<Vec<_>>();
+
+        Vector::new(payloads).unwrap()
     }
 
     pub fn payloads(&self) -> impl Iterator<Item = &Payload> {
