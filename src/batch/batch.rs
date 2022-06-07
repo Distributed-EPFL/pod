@@ -110,10 +110,6 @@ impl Batch {
         Vector::new(payloads).unwrap()
     }
 
-    pub fn len(&self) -> usize {
-        self.payloads.len()
-    }
-
     pub fn payloads(&self) -> impl Iterator<Item = &Payload> {
         self.payloads
             .items()
