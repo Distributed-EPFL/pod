@@ -1,4 +1,4 @@
-use crate::{batch::CompressedBatch, membership::Membership};
+use crate::{batch::CompressedBatch, membership::Membership, server::WitnessStatement};
 
 use doomstack::{here, Doom, ResultExt, Top};
 
@@ -7,7 +7,10 @@ use rand::prelude::*;
 use std::sync::Arc;
 
 use talk::{
-    crypto::{primitives::multi::Signature as MultiSignature, KeyCard},
+    crypto::{
+        primitives::{hash::Hash, multi::Signature as MultiSignature},
+        KeyCard,
+    },
     net::Connector,
 };
 
@@ -16,7 +19,7 @@ use tokio::sync::oneshot::{self, Sender as OneshotSender};
 pub struct LoadBroker {
     membership: Arc<Membership>,
     connector: Arc<dyn Connector>,
-    batches: Arc<Vec<CompressedBatch>>,
+    batches: Arc<Vec<(Hash, CompressedBatch)>>,
 }
 
 #[derive(Doom)]
@@ -28,7 +31,11 @@ enum TrySubmitError {
 }
 
 impl LoadBroker {
-    pub fn new<C>(membership: Membership, connector: C, batches: Vec<CompressedBatch>) -> Self
+    pub fn new<C>(
+        membership: Membership,
+        connector: C,
+        batches: Vec<(Hash, CompressedBatch)>,
+    ) -> Self
     where
         C: Connector,
     {
@@ -75,7 +82,7 @@ impl LoadBroker {
 
     async fn submit(
         connector: Arc<dyn Connector>,
-        batches: Arc<Vec<CompressedBatch>>,
+        batches: Arc<Vec<(Hash, CompressedBatch)>>,
         index: usize,
         server: KeyCard,
         mut witness_sender: Option<OneshotSender<MultiSignature>>,
@@ -94,7 +101,7 @@ impl LoadBroker {
 
     async fn try_submit(
         connector: &dyn Connector,
-        batches: &Vec<CompressedBatch>,
+        batches: &Vec<(Hash, CompressedBatch)>,
         index: usize,
         server: &KeyCard,
         witness_sender: &mut Option<OneshotSender<MultiSignature>>,
@@ -104,8 +111,11 @@ impl LoadBroker {
             .await
             .pot(TrySubmitError::ConnectFailed, here!())?;
 
+        let (root, batch) = batches.get(index).unwrap();
+        let root = *root;
+
         connection
-            .send_plain(batches.get(index).unwrap())
+            .send_plain(batch)
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 
@@ -119,6 +129,10 @@ impl LoadBroker {
                 .receive_plain::<MultiSignature>()
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
+
+            witness
+                .verify([server], &WitnessStatement::new(root))
+                .unwrap();
 
             let _ = witness_sender.take().unwrap().send(witness);
         } else {
