@@ -4,6 +4,7 @@ mod crypto;
 mod directory;
 mod membership;
 mod passepartout;
+mod server;
 
 pub use batch::{Batch, CompressedBatch, Message, Payload};
 pub use brokers::LoadBroker;
