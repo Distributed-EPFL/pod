@@ -14,7 +14,9 @@ use talk::{
     sync::fuse::Fuse,
 };
 
-use tokio::task;
+use tokio::{sync::Semaphore, task};
+
+const TASKS: usize = 128;
 
 pub struct Server {
     _fuse: Fuse,
@@ -41,6 +43,10 @@ impl Server {
 
     async fn listen(keychain: KeyChain, directory: Directory, mut listener: SessionListener) {
         let directory = Arc::new(directory);
+
+        let semaphore = Semaphore::new(TASKS);
+        let semaphore = Arc::new(semaphore);
+
         let fuse = Fuse::new();
 
         loop {
@@ -48,9 +54,10 @@ impl Server {
 
             let keychain = keychain.clone();
             let directory = directory.clone();
+            let semaphore = semaphore.clone();
 
             fuse.spawn(async move {
-                let _ = Server::serve(keychain, directory, session).await;
+                let _ = Server::serve(keychain, directory, semaphore, session).await;
             });
         }
     }
@@ -58,6 +65,7 @@ impl Server {
     async fn serve(
         keychain: KeyChain,
         directory: Arc<Directory>,
+        semaphore: Arc<Semaphore>,
         mut session: Session,
     ) -> Result<(), Top<ServeError>> {
         let batch = session
@@ -70,9 +78,9 @@ impl Server {
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
-        // TODO: Add semaphore here
+        let witness_shard = {
+            let _permit = semaphore.acquire().await.unwrap();
 
-        let witness_shard =
             task::spawn_blocking(move || -> Result<Option<MultiSignature>, Top<BatchError>> {
                 let batch = batch.decompress();
 
@@ -90,7 +98,8 @@ impl Server {
             })
             .await
             .unwrap()
-            .pot(ServeError::BatchInvalid, here!())?;
+            .pot(ServeError::BatchInvalid, here!())?
+        };
 
         if let Some(witness_shard) = witness_shard {
             session
