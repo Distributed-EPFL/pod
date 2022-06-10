@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use talk::{
     crypto::{primitives::multi::Signature as MultiSignature, KeyChain},
-    net::{Listener, SecureConnection},
+    net::{Session, SessionListener},
 };
 
 use tokio::task;
@@ -26,10 +26,7 @@ enum ServeError {
 }
 
 impl Server {
-    pub fn new<L>(keychain: KeyChain, directory: Directory, listener: L) -> Self
-    where
-        L: Listener,
-    {
+    pub fn new(keychain: KeyChain, directory: Directory, listener: SessionListener) -> Self {
         tokio::spawn(async move {
             Server::listen(keychain, directory, listener).await;
         });
@@ -37,20 +34,17 @@ impl Server {
         todo!()
     }
 
-    async fn listen<L>(keychain: KeyChain, directory: Directory, mut listener: L)
-    where
-        L: Listener,
-    {
+    async fn listen(keychain: KeyChain, directory: Directory, mut listener: SessionListener) {
         let directory = Arc::new(directory);
 
         loop {
-            let (_, connection) = listener.accept().await.unwrap();
+            let (_, session) = listener.accept().await;
 
             let keychain = keychain.clone();
             let directory = directory.clone();
 
             tokio::spawn(async move {
-                let _ = Server::serve(keychain, directory, connection).await;
+                let _ = Server::serve(keychain, directory, session).await;
             });
         }
     }
@@ -58,14 +52,14 @@ impl Server {
     async fn serve(
         keychain: KeyChain,
         directory: Arc<Directory>,
-        mut connection: SecureConnection,
+        mut session: Session,
     ) -> Result<(), Top<ServeError>> {
-        let batch = connection
+        let batch = session
             .receive_plain::<CompressedBatch>()
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
-        let verify = connection
+        let verify = session
             .receive_plain::<bool>()
             .await
             .pot(ServeError::ConnectionError, here!())?;
@@ -93,12 +87,13 @@ impl Server {
             .pot(ServeError::BatchInvalid, here!())?;
 
         if let Some(witness_shard) = witness_shard {
-            connection
+            session
                 .send_plain(&witness_shard)
                 .await
                 .pot(ServeError::ConnectionError, here!())?;
         }
 
+        session.end();
         Ok(())
     }
 }

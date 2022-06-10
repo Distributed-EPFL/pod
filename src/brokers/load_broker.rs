@@ -17,14 +17,14 @@ use talk::{
         primitives::{hash::Hash, multi::Signature as MultiSignature},
         Identity, KeyCard,
     },
-    net::Connector,
+    net::SessionConnector,
 };
 
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 
 pub struct LoadBroker {
     membership: Arc<Membership>,
-    connector: Arc<dyn Connector>,
+    connector: Arc<SessionConnector>,
     batches: Arc<Vec<(Hash, CompressedBatch)>>,
 }
 
@@ -37,14 +37,11 @@ enum TrySubmitError {
 }
 
 impl LoadBroker {
-    pub fn new<C>(
+    pub fn new(
         membership: Membership,
-        connector: C,
+        connector: SessionConnector,
         batches: Vec<(Hash, CompressedBatch)>,
-    ) -> Self
-    where
-        C: Connector,
-    {
+    ) -> Self {
         let membership = Arc::new(membership);
         let connector = Arc::new(connector);
         let batches = Arc::new(batches);
@@ -100,7 +97,7 @@ impl LoadBroker {
     }
 
     async fn submit(
-        connector: Arc<dyn Connector>,
+        connector: Arc<SessionConnector>,
         batches: Arc<Vec<(Hash, CompressedBatch)>>,
         index: usize,
         server: KeyCard,
@@ -119,13 +116,13 @@ impl LoadBroker {
     }
 
     async fn try_submit(
-        connector: &dyn Connector,
+        connector: &SessionConnector,
         batches: &Vec<(Hash, CompressedBatch)>,
         index: usize,
         server: &KeyCard,
         witness_shard_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
     ) -> Result<(), Top<TrySubmitError>> {
-        let mut connection = connector
+        let mut session = connector
             .connect(server.identity())
             .await
             .pot(TrySubmitError::ConnectFailed, here!())?;
@@ -133,18 +130,18 @@ impl LoadBroker {
         let (root, batch) = batches.get(index).unwrap();
         let root = *root;
 
-        connection
+        session
             .send_plain(batch)
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 
         if witness_shard_sender.is_some() {
-            connection
+            session
                 .send_plain(&true)
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
 
-            let witness_shard = connection
+            let witness_shard = session
                 .receive_plain::<MultiSignature>()
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
@@ -158,12 +155,13 @@ impl LoadBroker {
                 .unwrap()
                 .send((server.identity(), witness_shard));
         } else {
-            connection
+            session
                 .send_plain(&false)
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
         }
 
+        session.end();
         Ok(())
     }
 }
