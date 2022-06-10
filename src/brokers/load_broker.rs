@@ -66,14 +66,14 @@ impl LoadBroker {
 
         verifiers.sort();
 
-        let mut witness_receivers = Vec::new();
+        let mut witness_shard_receivers = Vec::new();
 
         for (identity, keycard) in self.membership.servers() {
-            let witness_sender = verifiers.binary_search(identity).ok().map(|_| {
-                let (witness_sender, witness_receiver) = oneshot::channel();
+            let witness_shard_sender = verifiers.binary_search(identity).ok().map(|_| {
+                let (witness_shard_sender, witness_shard_receiver) = oneshot::channel();
 
-                witness_receivers.push(witness_receiver);
-                witness_sender
+                witness_shard_receivers.push(witness_shard_receiver);
+                witness_shard_sender
             });
 
             let connector = self.connector.clone();
@@ -81,20 +81,20 @@ impl LoadBroker {
             let keycard = keycard.clone();
 
             tokio::spawn(async move {
-                LoadBroker::submit(connector, batches, index, keycard, witness_sender).await;
+                LoadBroker::submit(connector, batches, index, keycard, witness_shard_sender).await;
             });
         }
 
-        let witness_receivers = witness_receivers
+        let witness_shard_receivers = witness_shard_receivers
             .into_iter()
             .collect::<FuturesUnordered<_>>();
 
-        let witnesses = witness_receivers
-            .map(|witness| witness.unwrap())
+        let witness_shards = witness_shard_receivers
+            .map(|shard| shard.unwrap())
             .collect::<Vec<_>>()
             .await;
 
-        let witness = Certificate::aggregate(self.membership.as_ref(), witnesses);
+        let witness = Certificate::aggregate(self.membership.as_ref(), witness_shards);
     }
 
     async fn submit(
@@ -102,14 +102,14 @@ impl LoadBroker {
         batches: Arc<Vec<(Hash, CompressedBatch)>>,
         index: usize,
         server: KeyCard,
-        mut witness_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
+        mut witness_shard_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
     ) {
         while LoadBroker::try_submit(
             connector.as_ref(),
             batches.as_ref(),
             index,
             &server,
-            &mut witness_sender,
+            &mut witness_shard_sender,
         )
         .await
         .is_err()
@@ -121,7 +121,7 @@ impl LoadBroker {
         batches: &Vec<(Hash, CompressedBatch)>,
         index: usize,
         server: &KeyCard,
-        witness_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
+        witness_shard_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
     ) -> Result<(), Top<TrySubmitError>> {
         let mut connection = connector
             .connect(server.identity())
@@ -136,25 +136,25 @@ impl LoadBroker {
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 
-        if witness_sender.is_some() {
+        if witness_shard_sender.is_some() {
             connection
                 .send_plain(&true)
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
 
-            let witness = connection
+            let witness_shard = connection
                 .receive_plain::<MultiSignature>()
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
 
-            witness
+            witness_shard
                 .verify([server], &WitnessStatement::new(root))
                 .unwrap();
 
-            let _ = witness_sender
+            let _ = witness_shard_sender
                 .take()
                 .unwrap()
-                .send((server.identity(), witness));
+                .send((server.identity(), witness_shard));
         } else {
             connection
                 .send_plain(&false)
