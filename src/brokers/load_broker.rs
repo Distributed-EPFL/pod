@@ -20,10 +20,7 @@ use talk::{
     net::Connector,
 };
 
-use tokio::sync::{
-    oneshot::{self, Sender as OneshotSender},
-    watch::{self, Receiver as WatchReceiver},
-};
+use tokio::sync::oneshot::{self, Sender as OneshotSender};
 
 pub struct LoadBroker {
     membership: Arc<Membership>,
@@ -70,7 +67,6 @@ impl LoadBroker {
         verifiers.sort();
 
         let mut witness_shard_receivers = Vec::new();
-        let (witness_sender, witness_receiver) = watch::channel(None);
 
         for (identity, keycard) in self.membership.servers() {
             let witness_shard_sender = verifiers.binary_search(identity).ok().map(|_| {
@@ -83,18 +79,9 @@ impl LoadBroker {
             let connector = self.connector.clone();
             let batches = self.batches.clone();
             let keycard = keycard.clone();
-            let witness_receiver = witness_receiver.clone();
 
             tokio::spawn(async move {
-                LoadBroker::submit(
-                    connector,
-                    batches,
-                    index,
-                    keycard,
-                    witness_shard_sender,
-                    witness_receiver,
-                )
-                .await;
+                LoadBroker::submit(connector, batches, index, keycard, witness_shard_sender).await;
             });
         }
 
@@ -107,8 +94,9 @@ impl LoadBroker {
             .collect::<Vec<_>>()
             .await;
 
-        let witness = Certificate::aggregate(self.membership.as_ref(), witness_shards);
-        let _ = witness_sender.send(Some(witness));
+        let _witness = Certificate::aggregate(self.membership.as_ref(), witness_shards);
+
+        // TODO: Total-Order broadcast `root` and `witness`
     }
 
     async fn submit(
@@ -117,7 +105,6 @@ impl LoadBroker {
         index: usize,
         server: KeyCard,
         mut witness_shard_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
-        mut witness_receiver: WatchReceiver<Option<Certificate>>,
     ) {
         while LoadBroker::try_submit(
             connector.as_ref(),
@@ -125,7 +112,6 @@ impl LoadBroker {
             index,
             &server,
             &mut witness_shard_sender,
-            &mut witness_receiver,
         )
         .await
         .is_err()
@@ -138,7 +124,6 @@ impl LoadBroker {
         index: usize,
         server: &KeyCard,
         witness_shard_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
-        witness_receiver: &mut WatchReceiver<Option<Certificate>>,
     ) -> Result<(), Top<TrySubmitError>> {
         let mut connection = connector
             .connect(server.identity())
@@ -178,22 +163,6 @@ impl LoadBroker {
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
         }
-
-        let witness = {
-            let witness = witness_receiver.borrow_and_update().clone();
-
-            if let Some(witness) = witness {
-                witness
-            } else {
-                witness_receiver.changed().await.unwrap();
-                witness_receiver.borrow_and_update().clone().unwrap()
-            }
-        };
-
-        connection
-            .send_plain(&witness)
-            .await
-            .pot(TrySubmitError::ConnectionError, here!())?;
 
         Ok(())
     }
