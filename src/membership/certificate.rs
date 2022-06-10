@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use talk::crypto::{primitives::multi::Signature as MultiSignature, Identity, Statement};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Certificate {
     signers: BitVec,
     signature: MultiSignature,
