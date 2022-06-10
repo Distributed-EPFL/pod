@@ -6,7 +6,7 @@ use std::fs;
 
 use talk::crypto::KeyCard;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Directory {
     keycards: Vec<Option<KeyCard>>,
 }
