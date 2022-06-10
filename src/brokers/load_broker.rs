@@ -1,6 +1,12 @@
-use crate::{batch::CompressedBatch, membership::Membership, server::WitnessStatement};
+use crate::{
+    batch::CompressedBatch,
+    membership::{Certificate, Membership},
+    server::WitnessStatement,
+};
 
 use doomstack::{here, Doom, ResultExt, Top};
+
+use futures::stream::{FuturesUnordered, StreamExt};
 
 use rand::prelude::*;
 
@@ -9,7 +15,7 @@ use std::sync::Arc;
 use talk::{
     crypto::{
         primitives::{hash::Hash, multi::Signature as MultiSignature},
-        KeyCard,
+        Identity, KeyCard,
     },
     net::Connector,
 };
@@ -64,7 +70,7 @@ impl LoadBroker {
 
         for (identity, keycard) in self.membership.servers() {
             let witness_sender = verifiers.binary_search(identity).ok().map(|_| {
-                let (witness_sender, witness_receiver) = oneshot::channel::<MultiSignature>();
+                let (witness_sender, witness_receiver) = oneshot::channel();
 
                 witness_receivers.push(witness_receiver);
                 witness_sender
@@ -78,6 +84,17 @@ impl LoadBroker {
                 LoadBroker::submit(connector, batches, index, keycard, witness_sender).await;
             });
         }
+
+        let witness_receivers = witness_receivers
+            .into_iter()
+            .collect::<FuturesUnordered<_>>();
+
+        let witnesses = witness_receivers
+            .map(|witness| witness.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+
+        let witness = Certificate::aggregate(self.membership.as_ref(), witnesses);
     }
 
     async fn submit(
@@ -85,7 +102,7 @@ impl LoadBroker {
         batches: Arc<Vec<(Hash, CompressedBatch)>>,
         index: usize,
         server: KeyCard,
-        mut witness_sender: Option<OneshotSender<MultiSignature>>,
+        mut witness_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
     ) {
         while LoadBroker::try_submit(
             connector.as_ref(),
@@ -104,7 +121,7 @@ impl LoadBroker {
         batches: &Vec<(Hash, CompressedBatch)>,
         index: usize,
         server: &KeyCard,
-        witness_sender: &mut Option<OneshotSender<MultiSignature>>,
+        witness_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
     ) -> Result<(), Top<TrySubmitError>> {
         let mut connection = connector
             .connect(server.identity())
@@ -134,7 +151,10 @@ impl LoadBroker {
                 .verify([server], &WitnessStatement::new(root))
                 .unwrap();
 
-            let _ = witness_sender.take().unwrap().send(witness);
+            let _ = witness_sender
+                .take()
+                .unwrap()
+                .send((server.identity(), witness));
         } else {
             connection
                 .send_plain(&false)
