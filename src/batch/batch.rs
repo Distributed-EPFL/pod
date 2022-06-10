@@ -10,7 +10,7 @@ use rand::prelude::*;
 
 use std::{collections::BTreeMap, convert::TryInto, iter};
 
-use talk::crypto::primitives::{multi::Signature as MultiSignature, sign::Signature};
+use talk::crypto::primitives::{hash::Hash, multi::Signature as MultiSignature, sign::Signature};
 
 use varcram::VarCram;
 
@@ -108,6 +108,10 @@ impl Batch {
             .collect::<Vec<_>>();
 
         Vector::new(payloads).unwrap()
+    }
+
+    pub fn root(&self) -> Hash {
+        self.payloads.root()
     }
 
     pub fn payloads(&self) -> impl Iterator<Item = &Payload> {
