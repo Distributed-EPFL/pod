@@ -8,7 +8,7 @@ mod reduction_statement;
 pub(crate) use broadcast_statement::BroadcastStatement;
 pub(crate) use reduction_statement::ReductionStatement;
 
-pub use batch::Batch;
+pub use batch::{Batch, BatchError};
 pub use compressed_batch::CompressedBatch;
 pub use message::Message;
 pub use payload::Payload;
