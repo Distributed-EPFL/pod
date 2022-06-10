@@ -18,6 +18,7 @@ use talk::{
         Identity, KeyCard,
     },
     net::SessionConnector,
+    sync::fuse::Fuse,
 };
 
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
@@ -26,6 +27,7 @@ pub struct LoadBroker {
     membership: Arc<Membership>,
     connector: Arc<SessionConnector>,
     batches: Arc<Vec<(Hash, CompressedBatch)>>,
+    fuse: Fuse,
 }
 
 #[derive(Doom)]
@@ -45,11 +47,13 @@ impl LoadBroker {
         let membership = Arc::new(membership);
         let connector = Arc::new(connector);
         let batches = Arc::new(batches);
+        let fuse = Fuse::new();
 
         LoadBroker {
             membership,
             connector,
             batches,
+            fuse,
         }
     }
 
@@ -77,7 +81,7 @@ impl LoadBroker {
             let batches = self.batches.clone();
             let keycard = keycard.clone();
 
-            tokio::spawn(async move {
+            self.fuse.spawn(async move {
                 LoadBroker::submit(connector, batches, index, keycard, witness_shard_sender).await;
             });
         }
