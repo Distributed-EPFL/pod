@@ -11,11 +11,14 @@ use std::sync::Arc;
 use talk::{
     crypto::{primitives::multi::Signature as MultiSignature, KeyChain},
     net::{Session, SessionListener},
+    sync::fuse::Fuse,
 };
 
 use tokio::task;
 
-pub struct Server {}
+pub struct Server {
+    _fuse: Fuse,
+}
 
 #[derive(Doom)]
 enum ServeError {
@@ -27,15 +30,18 @@ enum ServeError {
 
 impl Server {
     pub fn new(keychain: KeyChain, directory: Directory, listener: SessionListener) -> Self {
-        tokio::spawn(async move {
+        let fuse = Fuse::new();
+
+        fuse.spawn(async move {
             Server::listen(keychain, directory, listener).await;
         });
 
-        todo!()
+        Server { _fuse: fuse }
     }
 
     async fn listen(keychain: KeyChain, directory: Directory, mut listener: SessionListener) {
         let directory = Arc::new(directory);
+        let fuse = Fuse::new();
 
         loop {
             let (_, session) = listener.accept().await;
@@ -43,7 +49,7 @@ impl Server {
             let keychain = keychain.clone();
             let directory = directory.clone();
 
-            tokio::spawn(async move {
+            fuse.spawn(async move {
                 let _ = Server::serve(keychain, directory, session).await;
             });
         }
