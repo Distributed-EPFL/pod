@@ -151,21 +151,23 @@ impl Server {
                     let batch = batch.decompress();
                     let root = batch.root();
 
-                    if verify {
+                    let witness_shard = if verify {
                         batch.verify(directory.as_ref())?;
-
-                        {
-                            let mut batches = batches.lock().unwrap();
-                            batches.insert(root, batch);
-                        }
 
                         let witness_shard =
                             keychain.multisign(&WitnessStatement::new(root)).unwrap();
 
-                        Ok((root, Some(witness_shard)))
+                        Some(witness_shard)
                     } else {
-                        Ok((root, None))
+                        None
+                    };
+
+                    {
+                        let mut batches = batches.lock().unwrap();
+                        batches.insert(root, batch);
                     }
+
+                    Ok((root, witness_shard))
                 },
             )
             .await
@@ -232,6 +234,8 @@ impl Server {
 
             time::sleep(BATCH_POLL).await;
         };
+
+        println!("Delivering all elements of batch {:?}", root);
 
         for _payload in batch.payloads() {
             // TODO: Do something with `payload`!
