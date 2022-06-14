@@ -192,6 +192,11 @@ impl LoadBroker {
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 
+        let _order_shard = session
+            .receive_plain::<MultiSignature>()
+            .await
+            .pot(TrySubmitError::ConnectionError, here!())?;
+
         session.end();
         Ok(())
     }

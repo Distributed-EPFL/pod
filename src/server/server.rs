@@ -198,7 +198,7 @@ impl Server {
         let order_shard = keychain.multisign(&OrderStatement::new(root)).unwrap();
 
         session
-            .send(&order_shard)
+            .send_plain(&order_shard)
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
