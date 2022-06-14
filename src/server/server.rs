@@ -11,6 +11,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use talk::{
@@ -22,9 +23,10 @@ use talk::{
     sync::fuse::Fuse,
 };
 
-use tokio::{sync::Semaphore, task};
+use tokio::{sync::Semaphore, task, time};
 
 const TASKS: usize = 128;
+const BATCH_POLL: Duration = Duration::from_millis(100);
 
 pub struct Server {
     _fuse: Fuse,
@@ -219,7 +221,21 @@ impl Server {
             .verify_plurality(&membership, &WitnessStatement::new(root))
             .pot(ProcessError::WitnessInvalid, here!())?;
 
-        // TODO: Deliver all elements of the batch
+        let batch = loop {
+            {
+                let mut batches = batches.lock().unwrap();
+
+                if let Some(batch) = batches.remove(&root) {
+                    break batch;
+                }
+            }
+
+            time::sleep(BATCH_POLL).await;
+        };
+
+        for _payload in batch.payloads() {
+            // TODO: Do something with `payload`!
+        }
 
         Ok(())
     }
