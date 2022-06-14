@@ -1,5 +1,6 @@
 use crate::{
     batch::{Batch, BatchError, CompressedBatch},
+    broadcast::Broadcast,
     directory::Directory,
     membership::{Certificate, Membership},
     server::WitnessStatement,
@@ -40,19 +41,28 @@ enum ServeError {
 }
 
 impl Server {
-    pub fn new(
+    pub fn new<B>(
         keychain: KeyChain,
         membership: Membership,
         directory: Directory,
+        broadcast: B,
         listener: SessionListener,
-    ) -> Self {
+    ) -> Self
+    where
+        B: Broadcast,
+    {
+        let broadcast = Arc::new(broadcast);
+
         let batches = HashMap::new();
         let batches = Arc::new(Mutex::new(batches));
 
         let fuse = Fuse::new();
 
         fuse.spawn(async move {
-            Server::listen(keychain, membership, directory, batches, listener).await;
+            Server::listen(
+                keychain, membership, directory, broadcast, batches, listener,
+            )
+            .await;
         });
 
         Server { _fuse: fuse }
@@ -62,6 +72,7 @@ impl Server {
         keychain: KeyChain,
         membership: Membership,
         directory: Directory,
+        broadcast: Arc<dyn Broadcast>,
         batches: Arc<Mutex<HashMap<Hash, Batch>>>,
         mut listener: SessionListener,
     ) {
@@ -79,12 +90,15 @@ impl Server {
             let keychain = keychain.clone();
             let membership = membership.clone();
             let directory = directory.clone();
+            let broadcast = broadcast.clone();
             let batches = batches.clone();
             let semaphore = semaphore.clone();
 
             fuse.spawn(async move {
-                let _ = Server::serve(keychain, membership, directory, batches, semaphore, session)
-                    .await;
+                let _ = Server::serve(
+                    keychain, membership, directory, broadcast, batches, semaphore, session,
+                )
+                .await;
             });
         }
     }
@@ -93,6 +107,7 @@ impl Server {
         keychain: KeyChain,
         membership: Arc<Membership>,
         directory: Arc<Directory>,
+        broadcast: Arc<dyn Broadcast>,
         batches: Arc<Mutex<HashMap<Hash, Batch>>>,
         semaphore: Arc<Semaphore>,
         mut session: Session,
@@ -107,15 +122,13 @@ impl Server {
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
-        let (witness_statement, witness_shard) = {
+        let (root, witness_shard) = {
             let _permit = semaphore.acquire().await.unwrap();
 
             task::spawn_blocking(
-                move || -> Result<(WitnessStatement, Option<MultiSignature>), Top<BatchError>> {
+                move || -> Result<(Hash, Option<MultiSignature>), Top<BatchError>> {
                     let batch = batch.decompress();
                     let root = batch.root();
-
-                    let witness_statement = WitnessStatement::new(root);
 
                     if verify {
                         batch.verify(directory.as_ref())?;
@@ -125,11 +138,12 @@ impl Server {
                             batches.insert(root, batch);
                         }
 
-                        let witness_shard = keychain.multisign(&witness_statement).unwrap();
+                        let witness_shard =
+                            keychain.multisign(&WitnessStatement::new(root)).unwrap();
 
-                        Ok((witness_statement, Some(witness_shard)))
+                        Ok((root, Some(witness_shard)))
                     } else {
-                        Ok((witness_statement, None))
+                        Ok((root, None))
                     }
                 },
             )
@@ -151,8 +165,11 @@ impl Server {
             .pot(ServeError::ConnectionError, here!())?;
 
         witness
-            .verify_plurality(membership.as_ref(), &witness_statement)
+            .verify_plurality(membership.as_ref(), &WitnessStatement::new(root))
             .pot(ServeError::WitnessInvalid, here!())?;
+
+        let submission = bincode::serialize(&(root, witness)).unwrap();
+        broadcast.order(submission.as_slice()).await;
 
         session.end();
         Ok(())
