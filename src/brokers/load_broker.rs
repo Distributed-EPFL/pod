@@ -21,7 +21,10 @@ use talk::{
     sync::fuse::Fuse,
 };
 
-use tokio::sync::oneshot::{self, Sender as OneshotSender};
+use tokio::sync::{
+    oneshot::{self, Sender as OneshotSender},
+    watch::{self, Receiver as WatchReceiver},
+};
 
 pub struct LoadBroker {
     membership: Arc<Membership>,
@@ -68,8 +71,13 @@ impl LoadBroker {
         verifiers.sort();
 
         let mut witness_shard_receivers = Vec::new();
+        let (witness_sender, witness_receiver) = watch::channel(None);
 
         for (identity, keycard) in self.membership.servers() {
+            let connector = self.connector.clone();
+            let batches = self.batches.clone();
+            let keycard = keycard.clone();
+
             let witness_shard_sender = verifiers.binary_search(identity).ok().map(|_| {
                 let (witness_shard_sender, witness_shard_receiver) = oneshot::channel();
 
@@ -77,12 +85,18 @@ impl LoadBroker {
                 witness_shard_sender
             });
 
-            let connector = self.connector.clone();
-            let batches = self.batches.clone();
-            let keycard = keycard.clone();
+            let witness_receiver = witness_receiver.clone();
 
             self.fuse.spawn(async move {
-                LoadBroker::submit(connector, batches, index, keycard, witness_shard_sender).await;
+                LoadBroker::submit(
+                    connector,
+                    batches,
+                    index,
+                    keycard,
+                    witness_shard_sender,
+                    witness_receiver,
+                )
+                .await;
             });
         }
 
@@ -95,9 +109,9 @@ impl LoadBroker {
             .collect::<Vec<_>>()
             .await;
 
-        let _witness = Certificate::aggregate(self.membership.as_ref(), witness_shards);
+        let witness = Certificate::aggregate(self.membership.as_ref(), witness_shards);
 
-        // TODO: Total-Order broadcast `root` and `witness`
+        let _ = witness_sender.send(Some(witness));
     }
 
     async fn submit(
@@ -106,13 +120,17 @@ impl LoadBroker {
         index: usize,
         server: KeyCard,
         mut witness_shard_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
+        mut witness_receiver: WatchReceiver<Option<Certificate>>,
     ) {
+        // TODO: Implement retry schedule?
+
         while LoadBroker::try_submit(
             connector.as_ref(),
             batches.as_ref(),
             index,
             &server,
             &mut witness_shard_sender,
+            &mut witness_receiver,
         )
         .await
         .is_err()
@@ -125,6 +143,7 @@ impl LoadBroker {
         index: usize,
         server: &KeyCard,
         witness_shard_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
+        witness_receiver: &mut WatchReceiver<Option<Certificate>>,
     ) -> Result<(), Top<TrySubmitError>> {
         let mut session = connector
             .connect(server.identity())
@@ -164,6 +183,14 @@ impl LoadBroker {
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
         }
+
+        witness_receiver.changed().await.unwrap();
+        let witness = witness_receiver.borrow().clone().unwrap();
+
+        session
+            .send_plain(&witness)
+            .await
+            .pot(TrySubmitError::ConnectionError, here!())?;
 
         session.end();
         Ok(())
