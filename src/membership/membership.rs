@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, fs};
 
 use talk::crypto::{Identity, KeyCard};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Membership {
     pub(in crate::membership) servers: BTreeMap<Identity, KeyCard>,
 }
