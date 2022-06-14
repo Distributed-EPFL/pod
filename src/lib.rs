@@ -1,4 +1,5 @@
 mod batch;
+mod broadcast;
 mod brokers;
 mod crypto;
 mod directory;
@@ -7,6 +8,7 @@ mod passepartout;
 mod server;
 
 pub use batch::{Batch, BatchError, CompressedBatch, Message, Payload};
+pub use broadcast::Broadcast;
 pub use brokers::LoadBroker;
 pub use directory::Directory;
 pub use membership::{Certificate, CertificateError, Membership};
