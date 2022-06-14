@@ -3,7 +3,7 @@ use crate::{
     broadcast::Broadcast,
     directory::Directory,
     membership::{Certificate, Membership},
-    server::WitnessStatement,
+    server::{OrderStatement, WitnessStatement},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -144,6 +144,7 @@ impl Server {
             .pot(ServeError::ConnectionError, here!())?;
 
         let (root, witness_shard) = {
+            let keychain = keychain.clone();
             let _permit = semaphore.acquire().await.unwrap();
 
             task::spawn_blocking(
@@ -193,6 +194,13 @@ impl Server {
 
         let submission = bincode::serialize(&(root, witness)).unwrap();
         broadcast.order(submission.as_slice()).await;
+
+        let order_shard = keychain.multisign(&OrderStatement::new(root)).unwrap();
+
+        session
+            .send(&order_shard)
+            .await
+            .pot(ServeError::ConnectionError, here!())?;
 
         session.end();
         Ok(())
