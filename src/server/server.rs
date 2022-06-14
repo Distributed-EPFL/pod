@@ -40,6 +40,15 @@ enum ServeError {
     WitnessInvalid,
 }
 
+#[derive(Doom)]
+enum ProcessError {
+    #[doom(description("Failed to deserialize: {}", source))]
+    #[doom(wrap(deserialize_failed))]
+    DeserializeFailed { source: Box<bincode::ErrorKind> },
+    #[doom(description("Witness invalid"))]
+    WitnessInvalid,
+}
+
 impl Server {
     pub fn new<B>(
         keychain: KeyChain,
@@ -58,11 +67,21 @@ impl Server {
 
         let fuse = Fuse::new();
 
+        {
+            let membership = membership.clone();
+            let broadcast = broadcast.clone();
+            let batches = batches.clone();
+
+            fuse.spawn(async move {
+                Server::listen(
+                    keychain, membership, directory, broadcast, batches, listener,
+                )
+                .await;
+            });
+        }
+
         fuse.spawn(async move {
-            Server::listen(
-                keychain, membership, directory, broadcast, batches, listener,
-            )
-            .await;
+            Server::deliver(membership, broadcast, batches).await;
         });
 
         Server { _fuse: fuse }
@@ -172,6 +191,36 @@ impl Server {
         broadcast.order(submission.as_slice()).await;
 
         session.end();
+        Ok(())
+    }
+
+    async fn deliver(
+        membership: Membership,
+        broadcast: Arc<dyn Broadcast>,
+        batches: Arc<Mutex<HashMap<Hash, Batch>>>,
+    ) {
+        loop {
+            let submission = broadcast.deliver().await;
+            let _ = Server::process(&membership, batches.as_ref(), submission.as_slice()).await;
+        }
+    }
+
+    async fn process(
+        membership: &Membership,
+        batches: &Mutex<HashMap<Hash, Batch>>,
+        submission: &[u8],
+    ) -> Result<(), Top<ProcessError>> {
+        let (root, witness) = bincode::deserialize::<(Hash, Certificate)>(submission)
+            .map_err(ProcessError::deserialize_failed)
+            .map_err(ProcessError::into_top)
+            .spot(here!())?;
+
+        witness
+            .verify_plurality(&membership, &WitnessStatement::new(root))
+            .pot(ProcessError::WitnessInvalid, here!())?;
+
+        // TODO: Deliver all elements of the batch
+
         Ok(())
     }
 }
