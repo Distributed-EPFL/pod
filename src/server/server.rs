@@ -243,8 +243,6 @@ impl Server {
             time::sleep(BATCH_POLL).await;
         };
 
-        println!("Delivering all elements of batch {:?}", root);
-
         for _payload in batch.payloads() {
             // TODO: Do something with `payload`!
         }
