@@ -1,5 +1,5 @@
 use crate::{
-    batch::{BatchError, CompressedBatch},
+    batch::{Batch, BatchError, CompressedBatch},
     directory::Directory,
     membership::{Certificate, Membership},
     server::WitnessStatement,
@@ -7,10 +7,16 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use talk::{
-    crypto::{primitives::multi::Signature as MultiSignature, KeyChain},
+    crypto::{
+        primitives::{hash::Hash, multi::Signature as MultiSignature},
+        KeyChain,
+    },
     net::{Session, SessionListener},
     sync::fuse::Fuse,
 };
@@ -40,10 +46,13 @@ impl Server {
         directory: Directory,
         listener: SessionListener,
     ) -> Self {
+        let batches = HashMap::new();
+        let batches = Arc::new(Mutex::new(batches));
+
         let fuse = Fuse::new();
 
         fuse.spawn(async move {
-            Server::listen(keychain, membership, directory, listener).await;
+            Server::listen(keychain, membership, directory, batches, listener).await;
         });
 
         Server { _fuse: fuse }
@@ -53,6 +62,7 @@ impl Server {
         keychain: KeyChain,
         membership: Membership,
         directory: Directory,
+        batches: Arc<Mutex<HashMap<Hash, Batch>>>,
         mut listener: SessionListener,
     ) {
         let membership = Arc::new(membership);
@@ -69,10 +79,12 @@ impl Server {
             let keychain = keychain.clone();
             let membership = membership.clone();
             let directory = directory.clone();
+            let batches = batches.clone();
             let semaphore = semaphore.clone();
 
             fuse.spawn(async move {
-                let _ = Server::serve(keychain, membership, directory, semaphore, session).await;
+                let _ = Server::serve(keychain, membership, directory, batches, semaphore, session)
+                    .await;
             });
         }
     }
@@ -81,6 +93,7 @@ impl Server {
         keychain: KeyChain,
         membership: Arc<Membership>,
         directory: Arc<Directory>,
+        batches: Arc<Mutex<HashMap<Hash, Batch>>>,
         semaphore: Arc<Semaphore>,
         mut session: Session,
     ) -> Result<(), Top<ServeError>> {
@@ -100,10 +113,18 @@ impl Server {
             task::spawn_blocking(
                 move || -> Result<(WitnessStatement, Option<MultiSignature>), Top<BatchError>> {
                     let batch = batch.decompress();
-                    let witness_statement = WitnessStatement::new(batch.root());
+                    let root = batch.root();
+
+                    let witness_statement = WitnessStatement::new(root);
 
                     if verify {
                         batch.verify(directory.as_ref())?;
+
+                        {
+                            let mut batches = batches.lock().unwrap();
+                            batches.insert(root, batch);
+                        }
+
                         let witness_shard = keychain.multisign(&witness_statement).unwrap();
 
                         Ok((witness_statement, Some(witness_shard)))
