@@ -243,6 +243,9 @@ impl Server {
             time::sleep(BATCH_POLL).await;
         };
 
+        // TODO: Remove this
+        println!("Delivering batch {:?}", root);
+
         for _payload in batch.payloads() {
             // TODO: Do something with `payload`!
         }
