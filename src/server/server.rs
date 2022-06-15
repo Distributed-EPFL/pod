@@ -23,12 +23,19 @@ use talk::{
     sync::fuse::Fuse,
 };
 
-use tokio::{sync::Semaphore, task, time};
+use tokio::{
+    sync::{
+        mpsc::{self, UnboundedReceiver, UnboundedSender},
+        Semaphore,
+    },
+    task, time,
+};
 
 const TASKS: usize = 128;
 const BATCH_POLL: Duration = Duration::from_millis(100);
 
 pub struct Server {
+    batch_receiver: UnboundedReceiver<Batch>,
     _fuse: Fuse,
 }
 
@@ -67,6 +74,8 @@ impl Server {
         let batches = HashMap::new();
         let batches = Arc::new(Mutex::new(batches));
 
+        let (batch_sender, batch_receiver) = mpsc::unbounded_channel();
+
         let fuse = Fuse::new();
 
         {
@@ -83,10 +92,17 @@ impl Server {
         }
 
         fuse.spawn(async move {
-            Server::deliver(membership, broadcast, batches).await;
+            Server::deliver(membership, broadcast, batches, batch_sender).await;
         });
 
-        Server { _fuse: fuse }
+        Server {
+            batch_receiver,
+            _fuse: fuse,
+        }
+    }
+
+    pub async fn next_batch(&mut self) -> Batch {
+        self.batch_receiver.recv().await.unwrap()
     }
 
     async fn listen(
@@ -210,10 +226,17 @@ impl Server {
         membership: Membership,
         broadcast: Arc<dyn Broadcast>,
         batches: Arc<Mutex<HashMap<Hash, Batch>>>,
+        batch_sender: UnboundedSender<Batch>,
     ) {
         loop {
             let submission = broadcast.deliver().await;
-            let _ = Server::process(&membership, batches.as_ref(), submission.as_slice()).await;
+            let _ = Server::process(
+                &membership,
+                batches.as_ref(),
+                submission.as_slice(),
+                &batch_sender,
+            )
+            .await;
         }
     }
 
@@ -221,6 +244,7 @@ impl Server {
         membership: &Membership,
         batches: &Mutex<HashMap<Hash, Batch>>,
         submission: &[u8],
+        batch_sender: &UnboundedSender<Batch>,
     ) -> Result<(), Top<ProcessError>> {
         let (root, witness) = bincode::deserialize::<(Hash, Certificate)>(submission)
             .map_err(ProcessError::deserialize_failed)
@@ -243,12 +267,7 @@ impl Server {
             time::sleep(BATCH_POLL).await;
         };
 
-        // TODO: Remove this
-        println!("Delivering batch {:?}", root);
-
-        for _payload in batch.payloads() {
-            // TODO: Do something with `payload`!
-        }
+        let _ = batch_sender.send(batch);
 
         Ok(())
     }
