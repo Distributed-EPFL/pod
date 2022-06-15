@@ -37,6 +37,8 @@ impl HotStuffInterface {
 
         let hash = hasher.finalize();
 
+        println!("Writing stuff in stream..");
+
         self.stream.write(&magic.to_le_bytes()).await.unwrap();
         self.stream.write(&opcode.to_le_bytes()).await.unwrap();
         self.stream.write(&length.to_le_bytes()).await.unwrap();
