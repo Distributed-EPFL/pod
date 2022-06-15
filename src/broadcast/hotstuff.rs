@@ -28,6 +28,7 @@ impl HotStuffInterface {
     }
 
     pub async fn order(&mut self, payload: &[u8]) {
+        println!("In underlying order..");
         let magic: u32 = 0;
         let opcode: u8 = 100;
         let length: u32 = payload.len().try_into().unwrap();
@@ -71,7 +72,9 @@ impl HotStuff {
 #[async_trait]
 impl Broadcast for HotStuff {
     async fn order(&self, payload: &[u8]) {
+        println!("Locking..");
         let mut iface = self.state.lock().await;
+        println!("Calling underlying order..");
         iface.order(payload).await;
     }
 
