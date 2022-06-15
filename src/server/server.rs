@@ -196,6 +196,7 @@ impl Server {
 
         println!("Broadcasting {:?}", submission.as_slice());
         broadcast.order(submission.as_slice()).await;
+        println!("Out of broadcasting..");
 
         let order_shard = keychain.multisign(&OrderStatement::new(root)).unwrap();
 
