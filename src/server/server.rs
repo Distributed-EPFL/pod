@@ -31,7 +31,7 @@ use tokio::{
     task, time,
 };
 
-const TASKS: usize = 35;
+const TASKS: usize = 18;
 const BATCH_POLL: Duration = Duration::from_millis(100);
 
 pub struct Server {
