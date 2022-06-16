@@ -10,7 +10,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 
 use rand::prelude::*;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use talk::{
     crypto::{
@@ -19,6 +19,7 @@ use talk::{
     },
     net::SessionConnector,
     sync::fuse::Fuse,
+    time::{sleep_schedules::CappedExponential, SleepSchedule},
 };
 
 use tokio::sync::{
@@ -122,7 +123,13 @@ impl LoadBroker {
         mut witness_shard_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
         mut witness_receiver: WatchReceiver<Option<Certificate>>,
     ) {
-        // TODO: Implement retry schedule?
+        let schedule: Box<dyn SleepSchedule> = Box::new(CappedExponential::new(
+            Duration::from_secs(1),
+            2.,
+            Duration::from_secs(60),
+        ));
+
+        let mut agent = schedule.agent();
 
         loop {
             if let Err(error) = LoadBroker::try_submit(
@@ -139,6 +146,8 @@ impl LoadBroker {
             } else {
                 break;
             }
+
+            agent.step().await;
         }
     }
 
