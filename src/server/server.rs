@@ -35,7 +35,7 @@ const TASKS: usize = 27;
 const BATCH_POLL: Duration = Duration::from_millis(100);
 
 pub struct Server {
-    batch_receiver: UnboundedReceiver<()>,
+    batch_receiver: UnboundedReceiver<Batch>,
     _fuse: Fuse,
 }
 
@@ -101,7 +101,7 @@ impl Server {
         }
     }
 
-    pub async fn next_batch(&mut self) {
+    pub async fn next_batch(&mut self) -> Batch {
         self.batch_receiver.recv().await.unwrap()
     }
 
@@ -229,7 +229,7 @@ impl Server {
         membership: Membership,
         broadcast: Arc<dyn Broadcast>,
         batches: Arc<Mutex<HashMap<Hash, Batch>>>,
-        batch_sender: UnboundedSender<()>,
+        batch_sender: UnboundedSender<Batch>,
     ) {
         loop {
             let submission = broadcast.deliver().await;
@@ -247,7 +247,7 @@ impl Server {
         membership: &Membership,
         batches: &Mutex<HashMap<Hash, Batch>>,
         submission: &[u8],
-        batch_sender: &UnboundedSender<()>,
+        batch_sender: &UnboundedSender<Batch>,
     ) -> Result<(), Top<ProcessError>> {
         let (root, witness) = bincode::deserialize::<(Hash, Certificate)>(submission)
             .map_err(ProcessError::deserialize_failed)
@@ -258,7 +258,7 @@ impl Server {
             .verify_plurality(&membership, &WitnessStatement::new(root))
             .pot(ProcessError::WitnessInvalid, here!())?;
 
-        let _batch = loop {
+        let batch = loop {
             {
                 let mut batches = batches.lock().unwrap();
 
@@ -270,7 +270,7 @@ impl Server {
             time::sleep(BATCH_POLL).await;
         };
 
-        let _ = batch_sender.send(());
+        let _ = batch_sender.send(batch);
 
         Ok(())
     }
