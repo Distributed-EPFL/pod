@@ -132,10 +132,12 @@ impl Server {
             let semaphore = semaphore.clone();
 
             fuse.spawn(async move {
-                let _ = Server::serve(
+                if let Err(error) = Server::serve(
                     keychain, membership, directory, broadcast, batches, semaphore, session,
                 )
-                .await;
+                .await {
+                    println!("{:?}", error);
+                }
             });
         }
     }
