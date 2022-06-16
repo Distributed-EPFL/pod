@@ -258,7 +258,7 @@ impl Server {
             .verify_plurality(&membership, &WitnessStatement::new(root))
             .pot(ProcessError::WitnessInvalid, here!())?;
 
-        let batch = loop {
+        let _batch = loop {
             {
                 let mut batches = batches.lock().unwrap();
 
