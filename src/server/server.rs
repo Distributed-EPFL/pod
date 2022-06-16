@@ -35,7 +35,7 @@ const TASKS: usize = 36;
 const BATCH_POLL: Duration = Duration::from_millis(100);
 
 pub struct Server {
-    batch_receiver: UnboundedReceiver<Batch>,
+    batch_receiver: UnboundedReceiver<()>,
     _fuse: Fuse,
 }
 
@@ -101,7 +101,7 @@ impl Server {
         }
     }
 
-    pub async fn next_batch(&mut self) -> Batch {
+    pub async fn next_batch(&mut self) {
         self.batch_receiver.recv().await.unwrap()
     }
 
@@ -229,7 +229,7 @@ impl Server {
         membership: Membership,
         broadcast: Arc<dyn Broadcast>,
         batches: Arc<Mutex<HashMap<Hash, Batch>>>,
-        batch_sender: UnboundedSender<Batch>,
+        batch_sender: UnboundedSender<()>,
     ) {
         loop {
             let submission = broadcast.deliver().await;
@@ -247,7 +247,7 @@ impl Server {
         membership: &Membership,
         batches: &Mutex<HashMap<Hash, Batch>>,
         submission: &[u8],
-        batch_sender: &UnboundedSender<Batch>,
+        batch_sender: &UnboundedSender<()>,
     ) -> Result<(), Top<ProcessError>> {
         let (root, witness) = bincode::deserialize::<(Hash, Certificate)>(submission)
             .map_err(ProcessError::deserialize_failed)
@@ -270,7 +270,7 @@ impl Server {
             time::sleep(BATCH_POLL).await;
         };
 
-        let _ = batch_sender.send(batch);
+        let _ = batch_sender.send(());
 
         Ok(())
     }
