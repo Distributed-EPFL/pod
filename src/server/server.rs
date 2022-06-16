@@ -185,6 +185,7 @@ impl Server {
                     {
                         let mut batches = batches.lock().unwrap();
                         batches.insert(root, batch);
+                        println!("+ {}", batches.len());
                     }
 
                     Ok((root, witness_shard))
@@ -263,6 +264,7 @@ impl Server {
                 let mut batches = batches.lock().unwrap();
 
                 if let Some(batch) = batches.remove(&root) {
+                    println!("- {}", batches.len());
                     break batch;
                 }
             }
