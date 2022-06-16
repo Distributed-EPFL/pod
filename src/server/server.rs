@@ -135,7 +135,8 @@ impl Server {
                 if let Err(error) = Server::serve(
                     keychain, membership, directory, broadcast, batches, semaphore, session,
                 )
-                .await {
+                .await
+                {
                     println!("{:?}", error);
                 }
             });
