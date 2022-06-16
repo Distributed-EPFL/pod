@@ -124,17 +124,22 @@ impl LoadBroker {
     ) {
         // TODO: Implement retry schedule?
 
-        while LoadBroker::try_submit(
-            connector.as_ref(),
-            batches.as_ref(),
-            index,
-            &server,
-            &mut witness_shard_sender,
-            &mut witness_receiver,
-        )
-        .await
-        .is_err()
-        {}
+        loop {
+            if let Err(error) = LoadBroker::try_submit(
+                connector.as_ref(),
+                batches.as_ref(),
+                index,
+                &server,
+                &mut witness_shard_sender,
+                &mut witness_receiver,
+            )
+            .await
+            {
+                println!("{:?}", error);
+            } else {
+                break;
+            }
+        }
     }
 
     async fn try_submit(
