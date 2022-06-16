@@ -9,7 +9,7 @@ use crate::{
 use doomstack::{here, Doom, ResultExt, Top};
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -119,6 +119,8 @@ impl Server {
         let semaphore = Semaphore::new(TASKS);
         let semaphore = Arc::new(semaphore);
 
+        let verified = Arc::new(Mutex::new(HashSet::new()));
+
         let fuse = Fuse::new();
 
         loop {
@@ -131,9 +133,12 @@ impl Server {
             let batches = batches.clone();
             let semaphore = semaphore.clone();
 
+            let verified = verified.clone();
+
             fuse.spawn(async move {
                 if let Err(error) = Server::serve(
                     keychain, membership, directory, broadcast, batches, semaphore, session,
+                    verified,
                 )
                 .await
                 {
@@ -151,6 +156,7 @@ impl Server {
         batches: Arc<Mutex<HashMap<Hash, Batch>>>,
         semaphore: Arc<Semaphore>,
         mut session: Session,
+        verified: Arc<Mutex<HashSet<Hash>>>,
     ) -> Result<(), Top<ServeError>> {
         let batch = session
             .receive_plain::<CompressedBatch>()
@@ -172,6 +178,10 @@ impl Server {
                     let root = batch.root();
 
                     let witness_shard = if verify {
+                        if !verified.lock().unwrap().insert(root) {
+                            println!("Double verification detected: {:?}", root);
+                        }
+
                         batch.verify(directory.as_ref())?;
 
                         let witness_shard =
