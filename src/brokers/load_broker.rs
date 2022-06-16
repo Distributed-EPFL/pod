@@ -184,7 +184,14 @@ impl LoadBroker {
                 .pot(TrySubmitError::ConnectionError, here!())?;
         }
 
-        witness_receiver.changed().await.unwrap();
+        // If `changed()` returns an `Err`, this means that `witness_sender` was
+        // dropped. However, before being dropped, `witness_sender` always sends
+        // the witness, which means that `witness` will be available both if
+        // `witness_sender` returns `Ok` (the witness was sent and the sender
+        // is still alive) or `Err` (the witness was sent and the sender was
+        // dropped).
+        let _ = witness_receiver.changed().await;
+
         let witness = witness_receiver.borrow().clone().unwrap();
 
         session
