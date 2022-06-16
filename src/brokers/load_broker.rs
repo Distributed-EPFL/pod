@@ -168,18 +168,18 @@ impl LoadBroker {
         let root = *root;
 
         session
-            .send_plain(batch)
+            .send_raw(batch)
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 
         if witness_shard_sender.is_some() {
             session
-                .send_plain(&true)
+                .send_raw(&true)
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
 
             let witness_shard = session
-                .receive_plain::<MultiSignature>()
+                .receive_raw::<MultiSignature>()
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
 
@@ -193,7 +193,7 @@ impl LoadBroker {
                 .send((server.identity(), witness_shard));
         } else {
             session
-                .send_plain(&false)
+                .send_raw(&false)
                 .await
                 .pot(TrySubmitError::ConnectionError, here!())?;
         }
@@ -209,12 +209,12 @@ impl LoadBroker {
         let witness = witness_receiver.borrow().clone().unwrap();
 
         session
-            .send_plain(&witness)
+            .send_raw(&witness)
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 
         let _order_shard = session
-            .receive_plain::<MultiSignature>()
+            .receive_raw::<MultiSignature>()
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 

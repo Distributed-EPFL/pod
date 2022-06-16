@@ -153,12 +153,12 @@ impl Server {
         mut session: Session,
     ) -> Result<(), Top<ServeError>> {
         let batch = session
-            .receive_plain::<CompressedBatch>()
+            .receive_raw::<CompressedBatch>()
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
         let verify = session
-            .receive_plain::<bool>()
+            .receive_raw::<bool>()
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
@@ -197,13 +197,13 @@ impl Server {
 
         if let Some(witness_shard) = witness_shard {
             session
-                .send_plain(&witness_shard)
+                .send_raw(&witness_shard)
                 .await
                 .pot(ServeError::ConnectionError, here!())?;
         }
 
         let witness = session
-            .receive_plain::<Certificate>()
+            .receive_raw::<Certificate>()
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
@@ -217,7 +217,7 @@ impl Server {
         let order_shard = keychain.multisign(&OrderStatement::new(root)).unwrap();
 
         session
-            .send_plain(&order_shard)
+            .send_raw(&order_shard)
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
