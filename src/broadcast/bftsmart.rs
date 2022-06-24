@@ -101,7 +101,9 @@ impl Broadcast for BftSmart {
     }
 
     async fn deliver(&self) -> Vec<u8> {
+	println!("deliver");
         let mut read = self.read.lock().await;
+	println!("read");
 
         let mut buf = vec![0; 40];
 
@@ -115,6 +117,7 @@ impl Broadcast for BftSmart {
 	let mut _padding = vec![0; 4];
         read.read_exact(&mut _padding).await.unwrap();
 
+	println!("return");
         return msg;
     }
 }
