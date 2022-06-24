@@ -117,7 +117,11 @@ impl Broadcast for BftSmart {
 	let mut _padding = vec![0; 4];
         read.read_exact(&mut _padding).await.unwrap();
 
-	println!("return");
+	let sender =
+	    u32::from_be_bytes(msg[0..4].try_into().unwrap());
+	let msgid =
+	    u64::from_be_bytes(msg[4..12].try_into().unwrap());
+	println!("deliver {}:{}", sender, msgid);
         return msg;
     }
 }
