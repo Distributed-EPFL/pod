@@ -263,14 +263,18 @@ impl Server {
 	println!("batches");
         let batch = loop {
             {
+		println!("  lock");
                 let mut batches = batches.lock().unwrap();
 
+		println!("  remove");
                 if let Some(batch) = batches.remove(&root) {
                     break batch;
                 }
             }
 
+	    println!("  sleep");
             time::sleep(BATCH_POLL).await;
+	    println!("  unlock");
         };
 
 	println!("send");
