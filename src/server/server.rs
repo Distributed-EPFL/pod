@@ -249,15 +249,18 @@ impl Server {
         submission: &[u8],
         batch_sender: &UnboundedSender<Batch>,
     ) -> Result<(), Top<ProcessError>> {
+	println!("deserialize");
         let (root, witness) = bincode::deserialize::<(Hash, Certificate)>(submission)
             .map_err(ProcessError::deserialize_failed)
             .map_err(ProcessError::into_top)
             .spot(here!())?;
 
+	println!("verify");
         witness
             .verify_plurality(&membership, &WitnessStatement::new(root))
             .pot(ProcessError::WitnessInvalid, here!())?;
 
+	println!("batches");
         let batch = loop {
             {
                 let mut batches = batches.lock().unwrap();
@@ -270,6 +273,7 @@ impl Server {
             time::sleep(BATCH_POLL).await;
         };
 
+	println!("send");
         let _ = batch_sender.send(batch);
 
         Ok(())
