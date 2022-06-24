@@ -84,6 +84,8 @@ impl Broadcast for BftSmart {
 
 	let write = &mut state.write;
 
+	println!("order {} bytes", payload.len());
+
         write.write(&totlen.to_be_bytes()).await.unwrap();
         write.write(&msglen.to_be_bytes()).await.unwrap();
         write.write(&self.id.to_be_bytes()).await.unwrap();
@@ -101,9 +103,7 @@ impl Broadcast for BftSmart {
     }
 
     async fn deliver(&self) -> Vec<u8> {
-	println!("deliver");
         let mut read = self.read.lock().await;
-	println!("read");
 
         let mut buf = vec![0; 40];
 
@@ -117,11 +117,8 @@ impl Broadcast for BftSmart {
 	let mut _padding = vec![0; 4];
         read.read_exact(&mut _padding).await.unwrap();
 
-	let sender =
-	    u32::from_be_bytes(msg[0..4].try_into().unwrap());
-	let msgid =
-	    u64::from_be_bytes(msg[4..12].try_into().unwrap());
-	println!("deliver {}:{}", sender, msgid);
+	println!("deliver {} bytes", msg.len());
+
         return msg;
     }
 }
