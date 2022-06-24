@@ -84,7 +84,7 @@ impl Broadcast for BftSmart {
 
 	let write = &mut state.write;
 
-	println!("order {} bytes", payload.len());
+	println!("order {:?}", payload);
 
         write.write(&totlen.to_be_bytes()).await.unwrap();
         write.write(&msglen.to_be_bytes()).await.unwrap();
@@ -117,7 +117,7 @@ impl Broadcast for BftSmart {
 	let mut _padding = vec![0; 4];
         read.read_exact(&mut _padding).await.unwrap();
 
-	println!("deliver {} bytes", msg.len());
+	println!("deliver {:?}", msg);
 
         return msg;
     }
