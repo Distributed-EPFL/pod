@@ -137,7 +137,7 @@ impl Server {
                 )
                 .await
                 {
-                    println!("{:?}", error);
+                    // println!("{:?}", error);
                 }
             });
         }
