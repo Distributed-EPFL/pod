@@ -31,27 +31,32 @@ impl BftSmart {
     pub async fn connect(id: u32, addr: &SocketAddr) -> Result<Self, Box<dyn Error>> {
         let stream = TcpStream::connect(addr).await?;
         let (read, mut write) = stream.into_split();
-	let session: u32 = rand::thread_rng().gen();
+        let session: u32 = rand::thread_rng().gen();
 
-	Self::subscribe(id, session, &mut write).await;
+        Self::subscribe(id, session, &mut write).await;
 
         let read = Mutex::new(read);
-	let sequence: u32 = 1;
-        let state = Mutex::new(BftSmartState{ write, sequence });
+        let sequence: u32 = 1;
+        let state = Mutex::new(BftSmartState { write, sequence });
 
-        Ok(Self { read, state, id, session })
+        Ok(Self {
+            read,
+            state,
+            id,
+            session,
+        })
     }
 
     async fn subscribe(id: u32, session: u32, write: &mut OwnedWriteHalf) {
-	let totlen: u32 = 40;
-	let msglen: u32 = 32;
-	let view: u32 = 0;
-	let rtype: u32 = 0;
-	let sequence: u32 = 0;
-	let opid: u32 = 0;
-	let reply: u32 = u32::MAX;
-	let contlen: u32 = 0;
-	let padding: u32 = 0;
+        let totlen: u32 = 40;
+        let msglen: u32 = 32;
+        let view: u32 = 0;
+        let rtype: u32 = 0;
+        let sequence: u32 = 0;
+        let opid: u32 = 0;
+        let reply: u32 = u32::MAX;
+        let contlen: u32 = 0;
+        let padding: u32 = 0;
 
         write.write(&totlen.to_be_bytes()).await.unwrap();
         write.write(&msglen.to_be_bytes()).await.unwrap();
@@ -72,17 +77,17 @@ impl Broadcast for BftSmart {
     async fn order(&self, payload: &[u8]) {
         let mut state = self.state.lock().await;
 
-	let sequence: u32 = state.sequence;
-	let view: u32 = 0;
-	let rtype: u32 = 0;
-	let opid: u32 = 0;
-	let reply: u32 = u32::MAX;
-	let contlen: u32 = payload.len().try_into().unwrap();
-	let msglen: u32 = 32 + contlen;
-	let padding: u32 = 0;
-	let totlen: u32 = msglen + 8;
+        let sequence: u32 = state.sequence;
+        let view: u32 = 0;
+        let rtype: u32 = 0;
+        let opid: u32 = 0;
+        let reply: u32 = u32::MAX;
+        let contlen: u32 = payload.len().try_into().unwrap();
+        let msglen: u32 = 32 + contlen;
+        let padding: u32 = 0;
+        let totlen: u32 = msglen + 8;
 
-	let write = &mut state.write;
+        let write = &mut state.write;
 
         write.write(&totlen.to_be_bytes()).await.unwrap();
         write.write(&msglen.to_be_bytes()).await.unwrap();
@@ -97,7 +102,7 @@ impl Broadcast for BftSmart {
         write.write(payload).await.unwrap();
         write.write(&padding.to_be_bytes()).await.unwrap();
 
-	state.sequence += 1;
+        state.sequence += 1;
     }
 
     async fn deliver(&self) -> Vec<u8> {
@@ -112,7 +117,7 @@ impl Broadcast for BftSmart {
 
         read.read_exact(&mut msg).await.unwrap();
 
-	let mut _padding = vec![0; 4];
+        let mut _padding = vec![0; 4];
         read.read_exact(&mut _padding).await.unwrap();
 
         return msg;
