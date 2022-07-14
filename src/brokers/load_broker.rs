@@ -1,5 +1,4 @@
 use crate::{
-    batch::CompressedBatch,
     membership::{Certificate, Membership},
     server::WitnessStatement,
 };
@@ -30,7 +29,7 @@ use tokio::sync::{
 pub struct LoadBroker {
     membership: Arc<Membership>,
     connector: Arc<SessionConnector>,
-    batches: Arc<Vec<(Hash, CompressedBatch)>>,
+    batches: Arc<Vec<(Hash, Vec<u8>)>>,
     fuse: Fuse,
 }
 
@@ -46,7 +45,7 @@ impl LoadBroker {
     pub fn new(
         membership: Membership,
         connector: SessionConnector,
-        batches: Vec<(Hash, CompressedBatch)>,
+        batches: Vec<(Hash, Vec<u8>)>,
     ) -> Self {
         let membership = Arc::new(membership);
         let connector = Arc::new(connector);
@@ -117,7 +116,7 @@ impl LoadBroker {
 
     async fn submit(
         connector: Arc<SessionConnector>,
-        batches: Arc<Vec<(Hash, CompressedBatch)>>,
+        batches: Arc<Vec<(Hash, Vec<u8>)>>,
         index: usize,
         server: KeyCard,
         mut witness_shard_sender: Option<OneshotSender<(Identity, MultiSignature)>>,
@@ -153,7 +152,7 @@ impl LoadBroker {
 
     async fn try_submit(
         connector: &SessionConnector,
-        batches: &Vec<(Hash, CompressedBatch)>,
+        batches: &Vec<(Hash, Vec<u8>)>,
         index: usize,
         server: &KeyCard,
         witness_shard_sender: &mut Option<OneshotSender<(Identity, MultiSignature)>>,
@@ -168,7 +167,7 @@ impl LoadBroker {
         let root = *root;
 
         session
-            .send_raw(batch)
+            .send_raw_bytes(batch.as_ref())
             .await
             .pot(TrySubmitError::ConnectionError, here!())?;
 

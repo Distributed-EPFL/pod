@@ -153,7 +153,7 @@ impl Server {
         mut session: Session,
     ) -> Result<(), Top<ServeError>> {
         let batch = session
-            .receive_raw::<CompressedBatch>()
+            .receive_raw_bytes()
             .await
             .pot(ServeError::ConnectionError, here!())?;
 
@@ -168,6 +168,11 @@ impl Server {
 
             task::spawn_blocking(
                 move || -> Result<(Hash, Option<MultiSignature>), Top<BatchError>> {
+                    let batch = bincode::deserialize::<CompressedBatch>(batch.as_slice())
+                        .map_err(BatchError::deserialize_failed)
+                        .map_err(BatchError::into_top)
+                        .spot(here!())?;
+
                     let batch = batch.decompress();
                     let root = batch.root();
 
@@ -211,9 +216,6 @@ impl Server {
             .verify_plurality(membership.as_ref(), &WitnessStatement::new(root))
             .pot(ServeError::WitnessInvalid, here!())?;
 
-        let submission = bincode::serialize(&(root, witness)).unwrap();
-        broadcast.order(submission.as_slice()).await;
-
         let order_shard = keychain.multisign(&OrderStatement::new(root)).unwrap();
 
         session
@@ -222,6 +224,10 @@ impl Server {
             .pot(ServeError::ConnectionError, here!())?;
 
         session.end();
+
+        let submission = bincode::serialize(&(root, witness)).unwrap();
+        broadcast.order(submission.as_slice()).await;
+        
         Ok(())
     }
 

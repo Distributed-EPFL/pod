@@ -27,6 +27,9 @@ pub struct Batch {
 
 #[derive(Doom)]
 pub enum BatchError {
+    #[doom(description("Failed to deserialize batch: {:?}", source))]
+    #[doom(wrap(deserialize_failed))]
+    DeserializeFailed { source: bincode::Error },
     #[doom(description("Batch invalid"))]
     BatchInvalid,
 }
