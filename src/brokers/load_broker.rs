@@ -141,7 +141,7 @@ impl LoadBroker {
             )
             .await
             {
-                // println!("{:?}", error);
+                println!("{:?}", error);
             } else {
                 break;
             }

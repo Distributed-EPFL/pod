@@ -137,7 +137,7 @@ impl Server {
                 )
                 .await
                 {
-                    // println!("{:?}", error);
+                    println!("{:?}", error);
                 }
             });
         }
@@ -227,7 +227,7 @@ impl Server {
 
         let submission = bincode::serialize(&(root, witness)).unwrap();
         broadcast.order(submission.as_slice()).await;
-        
+
         Ok(())
     }
 
